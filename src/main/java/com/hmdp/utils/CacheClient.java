@@ -8,20 +8,16 @@ import cn.hutool.json.JSONUtil;
 import com.hmdp.entity.Shop;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.convert.RedisData;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static com.hmdp.utils.RedisConstants.*;
-import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TTL;
 
 
 @Component
@@ -49,11 +45,11 @@ public class CacheClient {
      */
     public void setWithLogicalExpire(String key, Object value, Long time, TimeUnit unit) {
         //封装逻辑过期时间
-        RedisDate redisDate = new RedisDate();
-        redisDate.setData(value);
-        redisDate.setExpireTime(LocalDateTime.now().plusSeconds(unit.toSeconds(time)));
+        RedisData redisData = new RedisData();
+        redisData.setData(value);
+        redisData.setExpireTime(LocalDateTime.now().plusSeconds(unit.toSeconds(time)));
         //存入redis
-        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(redisDate));
+        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(redisData));
     }
 
     @Resource
@@ -77,7 +73,6 @@ public class CacheClient {
             Function<ID,R> dbFallback,
             Long time,
             TimeUnit unit
-
         ){
         String key = keyPrefix + id;
         // 1. 查询缓存中是否存在数据
@@ -101,56 +96,60 @@ public class CacheClient {
     }
 
     /**
-     * TODO:待补充
      * 利用互斥锁解决缓存击穿问题
      * @param id
      * @return
      */
-    /*private <R,ID> R queryWithLock(
-            R
-            R id){
-        String key = CACHE_SHOP_KEY + id;
+    private <R,ID> R queryWithLock(
+            String keyPrefix,
+            ID id,
+            Class<R> type,
+            Function<ID,R> dbFallback,
+            Long time,
+            TimeUnit unit
+            ){
+        String key = keyPrefix + id;
         // 1. 查询缓存中是否存在数据
         String json = stringRedisTemplate.opsForValue().get(key);
         // 1.1 读取到缓存，直接返回
-        try {
-            if (StrUtil.isNotBlank(json)) return JSONUtil.toBean(json, Shop.class);
-        } catch (Exception e) {
-            log.debug("---------:{},{},{}",json.getClass(),json,json.length());
-            throw new RuntimeException(e);
-        }
-
-
+        if (StrUtil.isNotBlank(json)) return JSONUtil.toBean(json, type);
         if ("".equals(json)) return null;
         // 2 缓存中没有数据，通过互斥锁重建缓存
         String lockKey = LOCK_SHOP_KEY + id;
-        Shop shop = null;
+        R r = null;
         try {
-            boolean isLock = cacheClient.tryLock(key);
+            boolean isLock = tryLock(key);
             if(!isLock){
                 //获取失败休眠并从重试
                 Thread.sleep(50);
-                return queryWithLock(id);
+                return queryWithLock(
+                        keyPrefix,
+                        id,
+                        type,
+                        dbFallback,
+                        time,
+                        unit
+                );
             }
             // 重建缓存,模拟延迟
             Thread.sleep(200);
-            shop = getById(id);
-            if(shop == null){
-                stringRedisTemplate.opsForValue().set(key,"",CACHE_NULL_TTL,TimeUnit.MINUTES);
+            r = dbFallback.apply(id);
+            if(r == null){
+                this.set(key,"",CACHE_NULL_TTL,TimeUnit.MINUTES);
                 return null;
             }
-            stringRedisTemplate.opsForValue().set(key,JSONUtil.toJsonStr(shop),CACHE_SHOP_TTL,TimeUnit.MINUTES);
+            this.set(key,r,CACHE_SHOP_TTL,TimeUnit.MINUTES);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } finally {
-            cacheClient.unLock(lockKey);
+            this.unLock(lockKey);
         }
-        return shop;
-    }*/
+        return r;
+    }
 
 
     /**
-     * TODO: 使用逻辑过期时间，未命中直接返回空问题
+     * 热点Key问题，redis缓存需要提前预热
      * 利用逻辑过期解决缓存击穿问题
      * 大致流程：缓存查询 ——> 逻辑过期时间 ——> 获得锁 ——> 开启新线程操作数据库 ——> 重建缓存加入逻辑过期时间
      *                                   |
@@ -167,10 +166,10 @@ public class CacheClient {
         // 1. 查询缓存中是否存在数据
         String json = stringRedisTemplate.opsForValue().get(key);
         if (StrUtil.isBlank(json))return null;
-        RedisDate redisDate = JSONUtil.toBean(json, RedisDate.class);
-        JSONObject jsonObject =(JSONObject) redisDate.getData();
+        RedisData redisData = JSONUtil.toBean(json, RedisData.class);
+        JSONObject jsonObject =(JSONObject) redisData.getData();
         R r = BeanUtil.toBean(jsonObject, type);
-        LocalDateTime expireTime = redisDate.getExpireTime();
+        LocalDateTime expireTime = redisData.getExpireTime();
         // 未过期直接返回
         if(expireTime.isAfter(LocalDateTime.now()))return r;
         // 过期重建缓存

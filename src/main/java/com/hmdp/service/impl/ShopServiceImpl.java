@@ -1,7 +1,6 @@
 package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
@@ -11,10 +10,8 @@ import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.CacheClient;
-import com.hmdp.utils.RedisDate;
+import com.hmdp.utils.RedisData;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -63,9 +60,17 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                 CACHE_SHOP_KEY,
                 id, Shop.class,
                 this::getById,
-                CACHE_SHOP_TTL,
+                LOGIC_EX_TTL,
                 TimeUnit.MINUTES
         );
+//        Shop shop = cacheClient.queryWithSaveNull(
+//                CACHE_SHOP_KEY,
+//                id, Shop.class,
+//                this::getById,
+//                CACHE_SHOP_TTL,
+//                TimeUnit.MINUTES
+//        );
+
         if(shop == null) return Result.fail(SHOP_NOT_EXIST);
         return Result.ok(shop);
     }
@@ -184,10 +189,10 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         String shopJson = stringRedisTemplate.opsForValue().get(key);
         if (StringUtils.isEmpty(shopJson))return null;
         // TODO:多次转换需要理解 命中 反序列化
-        RedisDate redisDate = JSONUtil.toBean(shopJson, RedisDate.class);
-        JSONObject jsonObject =(JSONObject) redisDate.getData();
+        RedisData redisData = JSONUtil.toBean(shopJson, RedisData.class);
+        JSONObject jsonObject =(JSONObject) redisData.getData();
         Shop shop = BeanUtil.toBean(jsonObject, Shop.class);
-        LocalDateTime expireTime = redisDate.getExpireTime();
+        LocalDateTime expireTime = redisData.getExpireTime();
         // 未过期直接返回
         if(expireTime.isAfter(LocalDateTime.now()))return shop;
         // 过期重建缓存
@@ -216,11 +221,11 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         Shop shop = getById(id);
         Thread.sleep(200);
         //封装逻辑过期
-        RedisDate redisDate = new RedisDate();
-        redisDate.setData(shop);
-        redisDate.setExpireTime(LocalDateTime.now().plusSeconds(expireSeconds));
+        RedisData redisData = new RedisData();
+        redisData.setData(shop);
+        redisData.setExpireTime(LocalDateTime.now().plusSeconds(expireSeconds));
         //写了redis
-        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY + id, JSONUtil.toJsonStr(redisDate));
+        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY + id, JSONUtil.toJsonStr(redisData));
     }
 
 

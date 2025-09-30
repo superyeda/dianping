@@ -7,6 +7,7 @@ public class RedisConstants {
     public static final Long LOGIN_USER_TTL = 36000L;
 
     public static final Long CACHE_NULL_TTL = 2L;
+    public static final Long LOGIC_EX_TTL = 1L;
 
     public static final Long CACHE_SHOP_TTL = 30L;
     public static final Long CACHE_SHOP_TYPE_TTL = 30L;
