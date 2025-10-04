@@ -175,7 +175,7 @@ public class CacheClient {
         // 过期重建缓存
         String lockKey = LOCK_SHOP_KEY + id;
         boolean isLock = tryLock(lockKey);
-        log.info("isLock:{}",isLock);
+//        log.info("isLock:{}",isLock);
         if(isLock){
             // 异步重建
             CACHE_REBUILD_EXECUTOR.submit(()->{
