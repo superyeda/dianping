@@ -19,4 +19,14 @@ public interface IShopService extends IService<Shop> {
      * @return
      */
     Result shopInfo(Long id);
+
+    /**
+     * 根据类型查询，有位置信息就根据距离排序
+     * @param typeId
+     * @param current
+     * @param x
+     * @param y
+     * @return
+     */
+    Result queryShopByType(Integer typeId, Integer current, Double x, Double y);
 }

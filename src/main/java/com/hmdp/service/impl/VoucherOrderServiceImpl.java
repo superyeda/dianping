@@ -88,7 +88,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                             StreamOffset.create(queueName, ReadOffset.lastConsumed())
                     );
                     if (list == null || list.isEmpty()) continue;
-                    log.debug("---------------------------------------");
                     MapRecord<String, Object, Object> record = list.get(0);
                     Map<Object, Object> value = record.getValue();
                     VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(value, new VoucherOrder(), true);
@@ -254,7 +253,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Override
     public Result secKillVoucher(Long voucherId) {
         Long userId = UserHolder.getUser().getId();
-        // TODO：判断前就生成订单号？
         Long orderId = redisIDWorker.nextId("order");
         Long result = stringRedisTemplate.execute(
                 SECKILL_SCRIPT,
@@ -311,7 +309,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                         .eq(SeckillVoucher::getVoucherId, voucherOrder.getVoucherId())
                         .gt(SeckillVoucher::getStock, 0)
                         .setSql("stock=stock-1"));
-        log.debug(isSuccess?"库存-1":"库存不变");
         //创建订单
         this.save(voucherOrder);
     }
