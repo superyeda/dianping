@@ -44,6 +44,7 @@ public class hmdpRedisTests {
     }
 
     // TODO: 需要理解GEO指令
+    // 预热：按分类存入店铺的地址信息
     @Test
     public void setGeo(){
         List<Shop> shopList = shopService.list();
@@ -63,4 +64,20 @@ public class hmdpRedisTests {
             stringRedisTemplate.opsForGeo().add(key,locations);
         }
     }
+    // 使用HyperLog记录UV，模拟百万并发
+    @Test
+    public void uvHyperLog(){
+        String[] values = new String[1000];
+        int j = 0;
+        for (int i = 0; i < 1000000; i++) {
+            j = i%1000;
+            values[j] = "user_"+i;
+            if (j == 999)
+                stringRedisTemplate.opsForHyperLogLog().add("hl2",values);
+        }
+        Long count = stringRedisTemplate.opsForHyperLogLog().size("hl2");
+        System.out.println(count);
+    }
+
+
 }
